@@ -1,0 +1,87 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      - echo "Installing dependencies..."
+      - npm ci
+
+  pre_build:
+    commands:
+      - echo "Fetching SSM parameters..."
+      - REGION=${AWS_REGION:-ap-southeast-2}
+      - ENV=${ENVIRONMENT:-prod}
+      - |
+        MONGODB_URI=$(aws ssm get-parameter \
+          --name "/blackfort/ec2/$ENV/mongodb-uri" \
+          --with-decryption \
+          --region "$REGION" \
+          --query "Parameter.Value" \
+          --output text)
+      - |
+        JWT_SECRET=$(aws ssm get-parameter \
+          --name "/blackfort/ec2/$ENV/jwt-secret" \
+          --with-decryption \
+          --region "$REGION" \
+          --query "Parameter.Value" \
+          --output text)
+      - |
+        MAPBOX_API_KEY=$(aws ssm get-parameter \
+          --name "/blackfort/ec2/$ENV/mapbox-api-key" \
+          --with-decryption \
+          --region "$REGION" \
+          --query "Parameter.Value" \
+          --output text)
+      - |
+        LENDER_API_URL=$(aws ssm get-parameter \
+          --name "/blackfort/ec2/$ENV/lender-api-url" \
+          --region "$REGION" \
+          --query "Parameter.Value" \
+          --output text)
+      - |
+        LENDER_API_EMAIL=$(aws ssm get-parameter \
+          --name "/blackfort/ec2/$ENV/lender-api-email" \
+          --with-decryption \
+          --region "$REGION" \
+          --query "Parameter.Value" \
+          --output text)
+      - |
+        LENDER_API_PASSWORD=$(aws ssm get-parameter \
+          --name "/blackfort/ec2/$ENV/lender-api-password" \
+          --with-decryption \
+          --region "$REGION" \
+          --query "Parameter.Value" \
+          --output text)
+      - |
+        cat > .env << EOF
+        NODE_ENV=production
+        PORT=4000
+        MONGODB_URI=${MONGODB_URI}
+        JWT_SECRET=${JWT_SECRET}
+        MAPBOX_API_KEY=${MAPBOX_API_KEY}
+        LENDER_API_URL=${LENDER_API_URL}
+        LENDER_API_EMAIL=${LENDER_API_EMAIL}
+        LENDER_API_PASSWORD=${LENDER_API_PASSWORD}
+        EOF
+
+  build:
+    commands:
+      - echo "Building TypeScript..."
+      - npm run build
+
+  post_build:
+    commands:
+      - echo "Build complete."
+
+artifacts:
+  files:
+    - dist/**/*
+    - node_modules/**/*
+    - package.json
+    - package-lock.json
+    - .env
+    - appspec.yml
+    - scripts/**/*
+  discard-paths: no
