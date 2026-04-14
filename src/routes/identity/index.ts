@@ -16,6 +16,17 @@ const requestOtpSchema = z.object({
   mobile: z.string().min(8),
 })
 
+const requestEmailOtpSchema = z.object({
+  email: z.string().email(),
+})
+
+const signupSchema = z.object({
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  email: z.string().email(),
+  mobile: z.string().min(8),
+})
+
 const verifyOtpSchema = z.object({
   userId: z.string(),
   otp: z.string(),
@@ -99,6 +110,49 @@ export default async function identityRoutes(fastify: FastifyInstance) {
     const { token } = archiTokenSchema.parse(request.body)
     const result = await svc().validateArchistaToken(token)
     if (!result.success) return reply.code(401).send(result)
+    return result
+  })
+
+  fastify.post('/api/identity/request-email-otp', {
+    schema: {
+      tags: ['Identity'],
+      summary: 'Request OTP via email for email login',
+      body: {
+        type: 'object',
+        required: ['email'],
+        properties: {
+          email: { type: 'string', format: 'email' },
+        },
+      },
+    },
+    config: { auth: false },
+  }, async (request, reply) => {
+    const body = requestEmailOtpSchema.parse(request.body)
+    const result = await svc().requestEmailOtp(body.email)
+    if (!result.success) return reply.code(400).send(result)
+    return result
+  })
+
+  fastify.post('/api/identity/signup', {
+    schema: {
+      tags: ['Identity'],
+      summary: 'Sign up a new user account',
+      body: {
+        type: 'object',
+        required: ['firstName', 'lastName', 'email', 'mobile'],
+        properties: {
+          firstName: { type: 'string' },
+          lastName:  { type: 'string' },
+          email:     { type: 'string', format: 'email' },
+          mobile:    { type: 'string' },
+        },
+      },
+    },
+    config: { auth: false },
+  }, async (request, reply) => {
+    const body = signupSchema.parse(request.body)
+    const result = await svc().signup(body)
+    if (!result.success) return reply.code(400).send(result)
     return result
   })
 

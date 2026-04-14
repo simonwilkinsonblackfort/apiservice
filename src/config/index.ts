@@ -82,6 +82,13 @@ const envSchema = z.object({
   SHAREPOINT_FILE_ID: z.string().default(''),
   SHAREPOINT_SHEET_NAME: z.string().default(''),
 
+  // Email (SMTP / nodemailer)
+  SMTP_HOST: z.string().default(''),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASS: z.string().default(''),
+  SMTP_FROM: z.string().default('noreply@blackfort.com.au'),
+
   // Archistar
   ARCHISTAR_URL: z.string().default(''),
   ARCHISTAR_API_KEY: z.string().default(''),

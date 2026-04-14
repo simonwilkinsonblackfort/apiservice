@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { Types } from 'mongoose'
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns'
+import nodemailer from 'nodemailer'
 import { UserRepository } from '../../repositories/identity/user.repository.js'
 import { TokenRepository } from '../../repositories/identity/token.repository.js'
 import { TokenType, ok, fail } from '../../domain/common.js'
@@ -22,6 +23,33 @@ async function sendOtpSms(mobile: string, otp: string): Promise<void> {
       'AWS.SNS.SMS.SenderID': { DataType: 'String', StringValue: 'Blackfort' },
     },
   }))
+}
+
+async function sendOtpEmail(email: string, otp: string): Promise<void> {
+  if (!config.SMTP_HOST) return // no SMTP configured — skip (OTP shown in response in dev)
+
+  const transporter = nodemailer.createTransport({
+    host: config.SMTP_HOST,
+    port: config.SMTP_PORT,
+    secure: config.SMTP_PORT === 465,
+    auth: config.SMTP_USER ? { user: config.SMTP_USER, pass: config.SMTP_PASS } : undefined,
+  })
+
+  await transporter.sendMail({
+    from: config.SMTP_FROM,
+    to: email,
+    subject: 'Your Blackfort verification code',
+    text: `Your Blackfort verification code is: ${otp}\n\nThis code is valid for 5 minutes.\n\nIf you did not request this, please ignore this email.`,
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#1a1b1d;border-radius:12px;color:#fff">
+        <img src="https://www.blackfort.com.au/logo.svg" alt="Blackfort" style="height:36px;margin-bottom:32px;filter:brightness(0) invert(1)" />
+        <h2 style="margin:0 0 8px;font-size:22px">Your verification code</h2>
+        <p style="color:#a0a8b8;margin:0 0 28px">Enter this code to complete your login.</p>
+        <div style="font-size:36px;font-weight:700;letter-spacing:12px;text-align:center;padding:20px;background:#111213;border-radius:10px;margin-bottom:24px">${otp}</div>
+        <p style="color:#6b7280;font-size:13px;margin:0">This code expires in 5 minutes. If you did not request this, please ignore this email.</p>
+      </div>
+    `,
+  })
 }
 
 export interface LoginRequest {
@@ -121,12 +149,66 @@ export class AuthService {
     })
 
     if (process.env.AWS_ACCESS_KEY_ID) {
-      await sendOtpSms(mobile, otp)
+      try {
+        await sendOtpSms(mobile, otp)
+      } catch (err: any) {
+        console.error('SMS OTP send failed:', err.message)
+        // Don't block — OTP preview covers dev; fix AWS credentials for production
+      }
     }
 
     return ok({
       userId: user._id.toString(),
       ...(config.SHOW_OTP_IN_RESPONSE ? { otpPreview: otp } : {}),
+    })
+  }
+
+  async requestEmailOtp(email: string) {
+    const user = await this.userRepo.findByEmail(email)
+    if (!user) return fail('No account found for that email address')
+
+    const otp = await this.tokenRepo.generateToken({
+      userId: user._id,
+      tokenType: TokenType.PassCode,
+      expiryMinutes: 5,
+    })
+
+    try {
+      await sendOtpEmail(email, otp)
+    } catch (err: any) {
+      console.error('Email OTP send failed:', err.message)
+      // Don't block — OTP preview covers dev
+    }
+
+    return ok({
+      userId: user._id.toString(),
+      ...(config.SHOW_OTP_IN_RESPONSE ? { otpPreview: otp } : {}),
+    })
+  }
+
+  async signup(params: {
+    firstName: string
+    lastName: string
+    email: string
+    mobile: string
+  }) {
+    // Check if account already exists
+    const existing = await this.userRepo.findByEmail(params.email)
+    if (existing) return fail('An account with that email already exists')
+
+    // Create user (no password — OTP-only login)
+    const user = await this.userRepo.createUser({
+      email: params.email,
+      password: Math.random().toString(36) + Math.random().toString(36), // random unusable password
+      mobile: params.mobile,
+      firstName: params.firstName,
+      lastName: params.lastName,
+      roles: ['Customer'],
+    })
+
+    return ok({
+      userId: user._id.toString(),
+      email: user.email,
     })
   }
 

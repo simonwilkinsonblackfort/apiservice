@@ -19,6 +19,7 @@ import workspaceRoutes from './routes/workspace/index.js'
 import propertyRoutes from './routes/property/index.js'
 import versionRoutes from './routes/version/index.js'
 import aiConfigRoutes from './routes/ai-config/index.js'
+import journeyRoutes from './routes/journey/index.js'
 
 export async function buildApp(opts: { logger?: boolean | object } = {}) {
   const fastify = Fastify({
@@ -69,6 +70,7 @@ export async function buildApp(opts: { logger?: boolean | object } = {}) {
   await fastify.register(fp(propertyRoutes))
   await fastify.register(fp(versionRoutes))
   await fastify.register(fp(aiConfigRoutes))
+  await fastify.register(fp(journeyRoutes))
 
   return fastify
 }
